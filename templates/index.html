@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buscador Unificado</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <span>📦</span> BuscadorProd
+            </div>
+
+            <nav class="nav-menu">
+                <a href="/" class="nav-item active">
+                    <span>🏠</span> Dashboard
+                </a>
+                <a href="#" class="nav-item" onclick="toggleCart(); return false;">
+                    <span>🛒</span> Carrito (<span id="cart-count">0</span>)
+                </a>
+                {% if current_user.username == 'SUPERVISOR' %}
+                <a href="/admin" class="nav-item">
+                    <span>⚙️</span> Administración
+                </a>
+                {% endif %}
+                <a href="/logout" class="nav-item logout-item">
+                    <span>🚪</span> Cerrar Sesión
+                </a>
+            </nav>
+
+            <div class="fuentes-resumen">
+                <p style="font-size: 11px; color: var(--text-muted); padding: 0 10px;">
+                    Base de Datos: {{ fuentes|length }} fuentes activas.
+                </p>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <header class="content-header">
+                <div>
+                    <h1>🔍 Buscador de Productos</h1>
+                    <p>Actualizado al: {{ fecha_actualizacion }}</p>
+                </div>
+            </header>
+
+            <section class="search-section">
+                <form method="POST" class="search-bar-modern">
+                    <input type="hidden" name="page" value="1">
+                    <span>🔎</span>
+                    <input type="text" name="q" placeholder="Buscar por producto, código o proveedor..."
+                        value="{{ current_q }}" required autofocus>
+
+                    <select name="proveedor">
+                        <option value="todos">Todos los laboratorios</option>
+                        {% for prov in proveedores %}
+                        <option value="{{ prov }}" {% if current_proveedor==prov %}selected{% endif %}>{{ prov }}
+                        </option>
+                        {% endfor %}
+                    </select>
+
+                    <select name="sort">
+                        <option value="nombre_asc" {% if current_sort=='nombre_asc' %}selected{% endif %}>A - Z</option>
+                        <option value="nombre_desc" {% if current_sort=='nombre_desc' %}selected{% endif %}>Z - A
+                        </option>
+                    </select>
+
+                    <button type="submit" class="btn-primary">Buscar</button>
+                </form>
+            </section>
+
+            {% if sin_stock %}
+            <div class="alert-sin-stock">
+                <span style="font-size: 24px;">❌</span>
+                <span>SIN STOCK — Producto no encontrado en ninguna fuente disponible</span>
+            </div>
+            {% endif %}
+
+            {% if resultados %}
+            <div class="results-section">
+                <div class="results-container">
+                    <div class="results-header">
+                        <div class="results-title">
+                            <span>Resultados de búsqueda:</span>
+                            <span class="results-count">{{ resultados|length }} producto(s)</span>
+                        </div>
+                        <div class="view-toggle">
+                            <button class="view-btn active" id="comparison-btn" onclick="toggleView('comparison')">
+                                📊 Comparar
+                            </button>
+                            <button class="view-btn" id="list-btn" onclick="toggleView('list')">
+                                📋 Lista
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Vista de Comparación -->
+                    <div id="comparison-view" class="comparison-view active">
+                        {% set sources = {} %}
+                        {% for r in resultados %}
+                        {% set fuente = r[4].split('|')[0] %}
+                        {% if fuente not in sources %}
+                        {% set _ = sources.update({fuente: []}) %}
+                        {% endif %}
+                        {% set _ = sources[fuente].append(r) %}
+                        {% endfor %}
+
+                        {% for fuente, productos in sources.items() %}
+                        {% set fuente_key = fuente.strip() %}
+                        {% set fuente_lower = fuente_key.lower() %}
+                        {% set fuente_display = fuente_labels.get(fuente_key, fuente_key) %}
+                        <div class="source-column">
+                            <div class="source-header source-color-{{ loop.index0 % 8 }}">
+                                {% if 'pionero' in fuente_lower %}📦
+                                {% elif 'prosalud' in fuente_lower %}🏥
+                                {% elif 'farmacom' in fuente_lower %}💊
+                                {% elif 'web' in fuente_lower %}🌐
+                                {% else %}📋{% endif %} {{ fuente_display }}
+                            </div>
+
+                            {% for producto in productos %}
+                            {% set precio = producto[3]|float %}
+                            {% set precios_producto = [] %}
+                            {% for r in resultados %}
+                            {% if r[1] == producto[1] %}
+                            {% set _ = precios_producto.append(r[3]|float) %}
+                            {% endif %}
+                            {% endfor %}
+                            {% set precio_minimo = precios_producto|min %}
+
+                            <div class="product-card" data-precio-base="{{ precio }}"
+                                data-escala="{{ producto[5] or '' }}" data-precio-escala="{{ producto[6] or '' }}">
+                                <div class="product-name">{{ producto[0] }}</div>
+                                <div class="product-details">
+                                    <div class="detail-row">
+                                        <span class="detail-label">Código:</span>
+                                        <span class="codigo-badge">{{ producto[1] }}</span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">Lab.:</span>
+                                        <span style="font-weight: 600;">{{ producto[2] }}</span>
+                                    </div>
+                                    {% if producto[7] %}
+                                    <div class="detail-row">
+                                        <span class="detail-label">Vencimiento:</span>
+                                        <span
+                                            class="vencimiento-badge {% if producto[8] %}venc-warning{% else %}venc-ok{% endif %}">
+                                            {{ producto[7] }}
+                                        </span>
+                                    </div>
+                                    {% endif %}
+                                    <div class="precio-container">
+                                        <div class="precio-tag">
+                                            <small>S/</small><span class="price-value">{{ "%.2f"|format(precio) }}</span>
+                                            {% if precio == precio_minimo and precios_producto|length > 1 %}
+                                            <span
+                                                style="font-size: 10px; background: var(--success); color: white; padding: 2px 6px; border-radius: 4px; margin-left: 5px;">MEJOR</span>
+                                            {% endif %}
+                                            <span class="scale-badge" style="display:none; font-size: 10px; background: var(--warning); color: white; padding: 2px 6px; border-radius: 4px; margin-left: 5px;">ESCALA</span>
+                                        </div>
+                                        {% if producto[5] and producto[6] %}
+                                        <div class="precio-escala">
+                                            +{{ (producto[5]|float)|int }} un. → S/ {{ "%.2f"|format(producto[6]|float) }}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="cart-controls">
+                                    <div class="quantity-controls">
+                                        <button type="button" class="qty-btn"
+                                            onclick="changeQuantity(this, -1)">-</button>
+                                        <input type="number" class="qty-input" value="1" min="1"
+                                            onchange="updateSubtotal(this)">
+                                        <button type="button" class="qty-btn"
+                                            onclick="changeQuantity(this, 1)">+</button>
+                                    </div>
+                                    <button type="button" class="add-to-cart-btn btn-primary"
+                                        data-nombre="{{ producto[0] }}" data-proveedor="{{ producto[2] }}"
+                                        data-precio-base="{{ precio }}" data-escala="{{ producto[5] or '' }}"
+                                        data-precio-escala="{{ producto[6] or '' }}" data-fuente="{{ fuente }}"
+                                        onclick="addToCartFromButton(this)"
+                                        style="width: 100%; margin-top: 10px; justify-content: center;">
+                                        Agregar al Carrito
+                                    </button>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Vista de Lista -->
+                    <div id="list-view" class="list-view">
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Producto</th>
+                                        <th>Código</th>
+                                        <th>Lab.</th>
+                                        <th>Vencimiento</th>
+                                        <th>Precio</th>
+                                        <th>Fuente</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for r in resultados %}
+                                    <tr data-precio-base="{{ r[3]|float }}" data-escala="{{ r[5] or '' }}"
+                                        data-precio-escala="{{ r[6] or '' }}">
+                                        <td><strong>{{ r[0] }}</strong></td>
+                                        <td><span class="codigo-badge">{{ r[1] }}</span></td>
+                                        <td>{{ r[2] }}</td>
+                                        <td>
+                                            {% if r[7] %}
+                                            <span
+                                                class="vencimiento-badge {% if r[8] %}venc-warning{% else %}venc-ok{% endif %}">
+                                                {{ r[7] }}
+                                            </span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="precio-tag" style="font-size: 16px;">
+                                                <small>S/</small><span class="price-value">{{ "%.2f"|format(r[3]|float) }}</span>
+                                                <span class="scale-badge" style="display:none; font-size: 10px; background: var(--warning); color: white; padding: 2px 6px; border-radius: 4px; margin-left: 5px;">ESCALA</span>
+                                            </div>
+                                            {% if r[5] and r[6] %}
+                                            <div style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">
+                                                +{{ (r[5]|float)|int }} un. → S/ {{ "%.2f"|format(r[6]|float) }}
+                                            </div>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% set f_item = r[4].split('|')[0].strip() %}
+                                            <span class="vencimiento-badge"
+                                                style="background: var(--bg-main); color: var(--text-muted);">
+                                                {{ fuente_labels.get(f_item, f_item) }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <button type="button" class="btn-primary" data-nombre="{{ r[0] }}"
+                                                data-proveedor="{{ r[2] }}" data-precio-base="{{ r[3]|float }}"
+                                                data-escala="{{ r[5] or '' }}" data-precio-escala="{{ r[6] or '' }}"
+                                                data-fuente="{{ r[4].split('|')[0] }}"
+                                                onclick="addToCartFromButton(this)">
+                                                Agregar
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                {% if total_pages > 1 %}
+                <div class="pagination">
+                    <form method="POST" class="pagination-form">
+                        <input type="hidden" name="q" value="{{ current_q }}">
+                        <input type="hidden" name="proveedor" value="{{ current_proveedor }}">
+                        <input type="hidden" name="sort" value="{{ current_sort }}">
+
+                        <button type="submit" name="page" value="{{ page - 1 }}" class="pagination-btn" {% if page <=1
+                            %}disabled{% endif %}>
+                            ←
+                        </button>
+
+                        <span style="font-weight: 600;">
+                            {{ page }} <span style="color: var(--text-muted); font-weight: 400;">de {{ total_pages
+                                }}</span>
+                        </span>
+
+                        <button type="submit" name="page" value="{{ page + 1 }}" class="pagination-btn" {% if page>=
+                            total_pages %}disabled{% endif %}>
+                            →
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+                {% endif %}
+        </main>
+    </div>
+
+    <!-- Panel del Carrito (Modal/Sidebar) -->
+    <div id="cart-panel" class="cart-panel">
+        <div class="cart-header">
+            <h3>🛒 Carrito</h3>
+            <button class="cart-toggle" onclick="toggleCart()">✕</button>
+        </div>
+        <div id="cart-items" class="cart-items">
+            <!-- Items -->
+        </div>
+        <div class="cart-total-section">
+            <div class="detail-row" style="margin-bottom: 15px; font-size: 18px; font-weight: 800;">
+                <span>Total:</span>
+                <span>S/ <span id="cart-total">0.00</span></span>
+            </div>
+            <button class="btn-primary" style="width:100%;" onclick="exportToExcel()">
+                📥 Exportar a Excel
+            </button>
+        </div>
+    </div>
+
+    </div>
+</body>
+
+</html>

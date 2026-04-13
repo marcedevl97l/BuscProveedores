@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Buscador de Productos</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap"
+        rel="stylesheet">
+    <style>
+        /* Modal overlay */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.6);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.active { display: flex; }
+
+        .modal-box {
+            background: var(--bg-card);
+            border-radius: 16px;
+            box-shadow: var(--shadow-lg);
+            width: 90%;
+            max-width: 780px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h2 { font-size: 17px; font-weight: 800; }
+        .modal-body {
+            padding: 24px;
+            overflow-y: auto;
+            flex: 1;
+        }
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        /* Tabla de preview */
+        .preview-table-wrap { overflow-x: auto; margin-bottom: 20px; }
+        .preview-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .preview-table th {
+            background: var(--bg-main);
+            padding: 8px 12px;
+            text-align: left;
+            font-weight: 700;
+            border: 1px solid var(--border);
+            white-space: nowrap;
+        }
+        .preview-table td {
+            padding: 6px 12px;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            max-width: 160px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* Grilla de mapeo */
+        .mapeo-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+        .mapeo-field label {
+            display: block;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 5px;
+            color: var(--text-main);
+        }
+        .mapeo-field .req { color: var(--danger); }
+        .mapeo-field select {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 13px;
+            background: var(--bg-main);
+            color: var(--text-main);
+        }
+        .mapeo-field select.auto-detected {
+            border-color: var(--success);
+            background: #f0fdf4;
+        }
+
+        /* Hoja tabs */
+        .hoja-tabs {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .hoja-tab {
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: var(--bg-main);
+            color: var(--text-muted);
+        }
+        .hoja-tab.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        /* Upload area */
+        .upload-drop-area {
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 32px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            margin-bottom: 16px;
+        }
+        .upload-drop-area:hover, .upload-drop-area.dragover {
+            border-color: var(--primary);
+            background: var(--primary-light);
+        }
+        .upload-drop-area input[type="file"] { display: none; }
+        .upload-drop-area .upload-icon { font-size: 32px; margin-bottom: 8px; }
+        .upload-drop-area p { font-size: 14px; color: var(--text-muted); }
+        .upload-drop-area strong { color: var(--primary); }
+
+        /* Badge de estado upload */
+        .upload-status {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+        .upload-status.loading { display: flex; background: #eff6ff; color: var(--primary); }
+        .upload-status.error   { display: flex; background: #fef2f2; color: var(--danger); }
+
+        .spinner {
+            width: 16px; height: 16px;
+            border: 2px solid #bfdbfe;
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            flex-shrink: 0;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <span class="logo-icon">⚙️</span>
+                    <span class="logo-text">AdminPanel</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="/" class="nav-item">
+                    <span class="nav-icon">📊</span>
+                    Dashboard
+                </a>
+                <a href="/admin" class="nav-item active">
+                    <span class="nav-icon">⚙️</span>
+                    Configuración
+                </a>
+                <a href="/logout" class="nav-item" style="margin-top: auto; color: #ef4444;">
+                    <span class="nav-icon">🚪</span>
+                    Cerrar Sesión
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="header">
+                <div>
+                    <h1 style="font-size: 24px; font-weight: 800; margin-bottom: 4px;">Configuración del Sistema</h1>
+                    <p style="color: var(--text-muted); font-size: 14px;">Gestiona credenciales y catálogos de productos.</p>
+                </div>
+            </header>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            {% for category, message in messages %}
+            <div class="alert-{{ category }}"
+                style="padding: 16px; border-radius: 12px; margin-bottom: 24px; font-weight: 600;">
+                {{ message }}
+            </div>
+            {% endfor %}
+            {% endif %}
+            {% endwith %}
+
+            <div class="comparison-view active">
+                <!-- Columna Scrapers -->
+                <div class="source-column">
+                    <div class="source-header farmacom">URLS Y CREDENCIALES</div>
+                    <div style="padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+                        <form action="/admin/save_config" method="POST"
+                            style="display: flex; flex-direction: column; gap: 20px;">
+                            <div class="input-group">
+                                <label>Usuario Farmacom</label>
+                                <input type="text" name="farmacom_user"
+                                    value="{{ config_data.get('farmacom_user', '') }}" placeholder="Ingrese usuario...">
+                            </div>
+                            <div class="input-group">
+                                <label>Contraseña Farmacom</label>
+                                <input type="password" name="farmacom_pass"
+                                    value="{{ config_data.get('farmacom_pass', '') }}"
+                                    placeholder="Ingrese contraseña...">
+                            </div>
+                            <div class="input-group">
+                                <label>Modo Navegador</label>
+                                <select name="farmacom_headless" class="search-bar-modern select" style="width: 100%;">
+                                    <option value="true" {% if config_data.get('farmacom_headless')=='true' %}selected{% endif %}>Oculto (Producción)</option>
+                                    <option value="false" {% if config_data.get('farmacom_headless')=='false' %}selected{% endif %}>Visible (Debug)</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn-primary" style="width: 100%; justify-content: center;">
+                                💾 Guardar Configuración
+                            </button>
+                            <button type="button" class="btn-primary" onclick="runScraper('farmacom')"
+                                style="width: 100%; justify-content: center; background: var(--success);">
+                                🚀 Ejecutar Scraper Ahora
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Columna Excels -->
+                <div class="source-column">
+                    <div class="source-header pionero">ARCHIVOS EXCEL (.XLSX)</div>
+                    <div style="padding: 24px;">
+
+                        <!-- Área de upload con drag & drop -->
+                        <label style="font-size: 13px; font-weight: 700; color: var(--text-main); display: block; margin-bottom: 12px;">
+                            Subir Nuevo Catálogo
+                        </label>
+
+                        <div class="upload-drop-area" id="dropArea" onclick="document.getElementById('fileInput').click()"
+                            ondragover="event.preventDefault(); this.classList.add('dragover')"
+                            ondragleave="this.classList.remove('dragover')"
+                            ondrop="handleDrop(event)">
+                            <input type="file" id="fileInput" accept=".xlsx" onchange="handleFileSelect(this.files[0])">
+                            <div class="upload-icon">📂</div>
+                            <p><strong>Haz clic</strong> o arrastrá el archivo aquí</p>
+                            <p style="font-size: 12px; margin-top: 4px;">Solo archivos .xlsx</p>
+                        </div>
+
+                        <div class="upload-status" id="uploadStatus">
+                            <div class="spinner"></div>
+                            <span id="uploadStatusText">Leyendo cabezales...</span>
+                        </div>
+
+                        <!-- Archivos disponibles -->
+                        <h4 style="font-size: 12px; font-weight: 800; margin-bottom: 15px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">
+                            Archivos Disponibles:
+                        </h4>
+                        <div style="display: flex; flex-direction: column; gap: 10px;" id="fileList">
+                            {% for file in excel_files %}
+                            <div id="file-{{ loop.index }}" style="padding: 12px 16px; background: var(--bg-main); border-radius: var(--radius); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="font-size: 12px; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: var(--text-muted);">{{ file }}</span>
+                                    <div style="display: flex; gap: 6px;">
+                                        <button class="pagination-btn" onclick="runScraper('excel', '{{ file }}')"
+                                            title="Recargar datos" style="width: 32px; height: 32px;">🔄</button>
+                                        <button class="pagination-btn" onclick="deleteExcel('{{ file }}', this)"
+                                            title="Eliminar archivo y sus datos"
+                                            style="width: 32px; height: 32px; color: var(--danger); border-color: #fecaca;">🗑️</button>
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <input type="text"
+                                        placeholder="Nombre en el dashboard (ej: Pionero Febrero)"
+                                        value="{{ fuente_labels.get(file, '') }}"
+                                        style="flex: 1; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; background: white;"
+                                        onkeydown="if(event.key==='Enter') saveFuenteNombre('{{ file }}', this)">
+                                    <button class="pagination-btn"
+                                        onclick="saveFuenteNombre('{{ file }}', this.previousElementSibling)"
+                                        title="Guardar nombre"
+                                        style="width: 32px; height: 32px;">💾</button>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Terminal Logs -->
+            <div class="source-column" style="margin-top: 24px;">
+                <div class="source-header otro">ESTADO Y LOGS DEL SISTEMA</div>
+                <div id="log-output"
+                    style="background: #0f172a; color: #10b981; padding: 24px; border-radius: 0 0 16px 16px; height: 350px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.7; border: 1px solid #1e293b; border-top: none;">
+                    <span style="color: #64748b;">>> Sistema iniciado. Esperando acciones...</span>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- ===== MODAL MAPEO DE COLUMNAS ===== -->
+    <div class="modal-overlay" id="mappingModal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h2>🗂️ Mapear Columnas del Excel</h2>
+                <button onclick="closeModal()" style="background:none; border:none; font-size:20px; cursor:pointer; color: var(--text-muted);">✕</button>
+            </div>
+            <div class="modal-body">
+
+                <!-- Selector de hoja (si hay varias) -->
+                <div id="hojaTabsContainer" style="display:none;">
+                    <p style="font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase;">
+                        Hoja a importar:
+                    </p>
+                    <div class="hoja-tabs" id="hojaTabs"></div>
+                </div>
+
+                <!-- Preview de la tabla -->
+                <p style="font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase;">
+                    Vista previa (primeras 3 filas):
+                </p>
+                <div class="preview-table-wrap">
+                    <table class="preview-table" id="previewTable"></table>
+                </div>
+
+                <hr style="border: none; border-top: 1px solid var(--border); margin: 20px 0;">
+
+                <!-- Mapeo de columnas -->
+                <p style="font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 14px; text-transform: uppercase;">
+                    Asignar columnas del Excel a los campos del sistema:
+                </p>
+                <div class="mapeo-grid">
+                    <div class="mapeo-field">
+                        <label>Nombre del producto <span class="req">*</span></label>
+                        <select id="map_nombre"></select>
+                    </div>
+                    <div class="mapeo-field">
+                        <label>Precio <span class="req">*</span></label>
+                        <select id="map_precio"></select>
+                    </div>
+                    <div class="mapeo-field">
+                        <label>Código</label>
+                        <select id="map_codigo"></select>
+                    </div>
+                    <div class="mapeo-field">
+                        <label>Laboratorio / Proveedor</label>
+                        <select id="map_proveedor"></select>
+                    </div>
+                    <div class="mapeo-field">
+                        <label>Fecha de Vencimiento</label>
+                        <select id="map_fecha_venc"></select>
+                    </div>
+                    <div class="mapeo-field">
+                        <label>Cantidad por escala</label>
+                        <select id="map_escala"></select>
+                    </div>
+                    <div class="mapeo-field">
+                        <label>Precio por escala</label>
+                        <select id="map_precio_escala"></select>
+                    </div>
+                </div>
+
+                <p style="font-size: 11px; color: var(--text-muted); margin-top: 14px;">
+                    <span class="req">*</span> Campos requeridos. Los campos con borde verde fueron detectados automáticamente.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeModal()" style="padding: 10px 20px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-main); font-weight: 600; cursor: pointer;">
+                    Cancelar
+                </button>
+                <button onclick="procesarExcel()" class="btn-primary" style="justify-content: center;">
+                    ✅ Procesar e Importar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ─── Estado global ────────────────────────────────────────────────────
+        let currentFilename = '';
+        let currentHojas = {};
+        let currentHojaKey = '';
+
+        // ─── Upload y lectura de cabezales ────────────────────────────────────
+        function handleDrop(e) {
+            e.preventDefault();
+            document.getElementById('dropArea').classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) handleFileSelect(file);
+        }
+
+        function handleFileSelect(file) {
+            if (!file || !file.name.endsWith('.xlsx')) {
+                showUploadStatus('error', 'Solo se aceptan archivos .xlsx');
+                return;
+            }
+            showUploadStatus('loading', `Leyendo "${file.name}"...`);
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch('/admin/preview_excel', { method: 'POST', body: formData })
+                .then(r => r.json())
+                .then(data => {
+                    hideUploadStatus();
+                    if (data.error) {
+                        showUploadStatus('error', data.error);
+                        return;
+                    }
+                    currentFilename = data.filename;
+                    currentHojas = data.hojas;
+                    const hojaKeys = Object.keys(data.hojas);
+                    currentHojaKey = hojaKeys[0];
+                    openMappingModal(hojaKeys);
+                })
+                .catch(err => {
+                    showUploadStatus('error', 'Error al leer el archivo: ' + err);
+                });
+        }
+
+        function showUploadStatus(type, msg) {
+            const el = document.getElementById('uploadStatus');
+            el.className = 'upload-status ' + type;
+            document.getElementById('uploadStatusText').textContent = msg;
+        }
+        function hideUploadStatus() {
+            document.getElementById('uploadStatus').className = 'upload-status';
+        }
+
+        // ─── Modal ────────────────────────────────────────────────────────────
+        function openMappingModal(hojaKeys) {
+            // Tabs de hojas
+            const tabsContainer = document.getElementById('hojaTabsContainer');
+            const tabsDiv = document.getElementById('hojaTabs');
+            tabsDiv.innerHTML = '';
+
+            if (hojaKeys.length > 1) {
+                tabsContainer.style.display = 'block';
+                hojaKeys.forEach((key, i) => {
+                    const btn = document.createElement('button');
+                    btn.className = 'hoja-tab' + (i === 0 ? ' active' : '');
+                    btn.textContent = key;
+                    btn.onclick = () => switchHoja(key, btn);
+                    tabsDiv.appendChild(btn);
+                });
+            } else {
+                tabsContainer.style.display = 'none';
+            }
+
+            renderHoja(currentHojaKey);
+            document.getElementById('mappingModal').classList.add('active');
+        }
+
+        function switchHoja(key, btn) {
+            currentHojaKey = key;
+            document.querySelectorAll('.hoja-tab').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderHoja(key);
+        }
+
+        function renderHoja(hojaKey) {
+            const hoja = currentHojas[hojaKey];
+            if (!hoja) return;
+
+            // Preview table
+            const table = document.getElementById('previewTable');
+            let html = '<thead><tr>';
+            hoja.headers.forEach(h => { html += `<th>${escHtml(h)}</th>`; });
+            html += '</tr></thead><tbody>';
+            hoja.preview.forEach(row => {
+                html += '<tr>';
+                row.forEach(cell => { html += `<td title="${escHtml(cell)}">${escHtml(cell)}</td>`; });
+                html += '</tr>';
+            });
+            html += '</tbody>';
+            table.innerHTML = html;
+
+            // Populate selects
+            const autoMap = autoDetectMapping(hoja.headers);
+            const fields = ['nombre', 'precio', 'codigo', 'proveedor', 'fecha_venc', 'escala', 'precio_escala'];
+            const required = ['nombre', 'precio'];
+
+            fields.forEach(field => {
+                const sel = document.getElementById('map_' + field);
+                sel.innerHTML = `<option value="">— ${required.includes(field) ? 'Seleccionar' : 'Ninguno'} —</option>`;
+                hoja.headers.forEach(h => {
+                    const opt = document.createElement('option');
+                    opt.value = h;
+                    opt.textContent = h;
+                    sel.appendChild(opt);
+                });
+                const detected = autoMap[field];
+                if (detected) {
+                    sel.value = detected;
+                    sel.classList.add('auto-detected');
+                } else {
+                    sel.classList.remove('auto-detected');
+                }
+                sel.onchange = () => sel.classList.remove('auto-detected');
+            });
+        }
+
+        function closeModal() {
+            document.getElementById('mappingModal').classList.remove('active');
+            document.getElementById('fileInput').value = '';
+        }
+
+        // ─── Auto-detección de columnas ───────────────────────────────────────
+        function autoDetectMapping(headers) {
+            const rules = {
+                nombre:        ['nom', 'prod', 'descri', 'articul', 'medic', 'detalle', 'item'],
+                codigo:        ['cod', 'sku', 'ref', 'clave', 'nro', 'num'],
+                proveedor:     ['prov', 'lab', 'marca', 'brand', 'fabricant', 'laborat'],
+                precio:        ['prec', 'price', 'pvp', 'venta', 'costo', 'valor', 'p.u', 'p.v'],
+                fecha_venc:    ['venc', 'expir', 'caduc', 'fecha', 'vig', 'f.v'],
+                escala:        ['escala', 'cant_mayor', 'cant mayor', 'mayor'],
+                precio_escala: ['p_mayor', 'precio mayor', 'precio_escala', 'p.mayor'],
+            };
+            const result = {};
+            headers.forEach(h => {
+                const hl = h.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                for (const [field, kws] of Object.entries(rules)) {
+                    if (!result[field] && kws.some(kw => hl.includes(kw))) {
+                        result[field] = h;
+                    }
+                }
+            });
+            return result;
+        }
+
+        // ─── Procesar con mapeo ───────────────────────────────────────────────
+        function procesarExcel() {
+            const nombre = document.getElementById('map_nombre').value;
+            const precio = document.getElementById('map_precio').value;
+
+            if (!nombre || !precio) {
+                alert('Debes asignar al menos "Nombre del producto" y "Precio".');
+                return;
+            }
+
+            const mapeo = {
+                nombre:        nombre,
+                precio:        precio,
+                codigo:        document.getElementById('map_codigo').value || null,
+                proveedor:     document.getElementById('map_proveedor').value || null,
+                fecha_venc:    document.getElementById('map_fecha_venc').value || null,
+                escala:        document.getElementById('map_escala').value || null,
+                precio_escala: document.getElementById('map_precio_escala').value || null,
+            };
+
+            closeModal();
+            logLine('blue', `Procesando "${currentFilename}" con mapeo personalizado...`);
+
+            fetch('/admin/process_mapped_excel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: currentFilename, mapeo })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        logLine('green', '✅ ' + data.message);
+                        setTimeout(() => location.reload(), 1200);
+                    } else {
+                        logLine('red', '❌ ' + data.message);
+                    }
+                })
+                .catch(err => logLine('red', 'Error de red: ' + err));
+        }
+
+        // ─── Guardar nombre de fuente ─────────────────────────────────────────
+        function saveFuenteNombre(filename, input) {
+            const nombre = input.value.trim();
+            fetch('/admin/save_fuente_nombre', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename, nombre })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        input.style.borderColor = 'var(--success)';
+                        logLine('green', '✅ ' + data.message);
+                        setTimeout(() => input.style.borderColor = '', 1500);
+                    } else {
+                        logLine('red', '❌ ' + data.message);
+                    }
+                })
+                .catch(err => logLine('red', 'Error: ' + err));
+        }
+
+        // ─── Eliminar archivo ─────────────────────────────────────────────────
+        function deleteExcel(filename, btn) {
+            if (!confirm(`¿Eliminar "${filename}" y todos sus productos de la base de datos?\nEsta acción no se puede deshacer.`)) return;
+
+            btn.disabled = true;
+            btn.textContent = '⏳';
+            logLine('blue', `Eliminando "${filename}"...`);
+
+            fetch('/admin/delete_excel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        logLine('green', '✅ ' + data.message);
+                        // Remover la fila del DOM
+                        btn.closest('div[id^="file-"]').remove();
+                    } else {
+                        logLine('red', '❌ ' + data.message);
+                        btn.disabled = false;
+                        btn.textContent = '🗑️';
+                    }
+                })
+                .catch(err => {
+                    logLine('red', 'Error de red: ' + err);
+                    btn.disabled = false;
+                    btn.textContent = '🗑️';
+                });
+        }
+
+        // ─── Scraper existente ────────────────────────────────────────────────
+        function runScraper(type, filename = '') {
+            logLine('blue', `Iniciando proceso ${type}${filename ? ' para ' + filename : ''}...`);
+
+            fetch('/admin/run_process', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type, filename })
+            })
+                .then(res => res.json())
+                .then(data => logLine('green', data.message))
+                .catch(err => logLine('red', 'Error: ' + err));
+        }
+
+        // ─── Helpers ──────────────────────────────────────────────────────────
+        function logLine(color, msg) {
+            const colors = { blue: '#3b82f6', green: '#10b981', red: '#ef4444' };
+            const output = document.getElementById('log-output');
+            output.innerHTML += `\n<span style="color:${colors[color] || '#10b981'};">[${new Date().toLocaleTimeString()}]</span> ${msg}`;
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function escHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+    </script>
+</body>
+
+</html>

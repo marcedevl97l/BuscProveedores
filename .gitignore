@@ -1,0 +1,34 @@
+# Credenciales y configuración local
+.env
+
+# Base de datos (no subir datos reales)
+*.sqlite
+*.db
+
+# Archivos Excel con datos reales
+data/
+
+# Entorno virtual Python
+.venv/
+venv/
+env/
+
+# Caché de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Playwright (navegadores descargados)
+playwright-chromium/
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDEs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
