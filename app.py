@@ -497,13 +497,18 @@ def delete_excel():
         return jsonify({'status': 'error', 'message': 'No autorizado'}), 403
 
     data = request.get_json()
-    filename = data.get('filename', '')
+    filename = data.get('filename', '').strip()
     if not filename:
         return jsonify({'status': 'error', 'message': 'Nombre de archivo no especificado.'})
 
-    filename = secure_filename(filename)
+    # Validar sin transformar el nombre (secure_filename cambia espacios a _ y rompe la búsqueda)
+    if '/' in filename or '\\' in filename or '..' in filename:
+        return jsonify({'status': 'error', 'message': 'Nombre de archivo no válido.'})
+
     data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
     filepath = os.path.join(data_dir, filename)
+    if not os.path.realpath(filepath).startswith(os.path.realpath(data_dir) + os.sep):
+        return jsonify({'status': 'error', 'message': 'Nombre de archivo no válido.'})
 
     # Borrar productos de la DB
     conn = sqlite3.connect(DB)
@@ -525,7 +530,22 @@ def delete_excel():
         os.remove(filepath)
         return jsonify({'status': 'success', 'message': f'"{filename}" eliminado. {eliminados} productos removidos de la base de datos.'})
     else:
-        return jsonify({'status': 'success', 'message': f'Productos de "{filename}" eliminados ({eliminados} registros). El archivo ya no existía en disco.'})
+        return jsonify({'status': 'warning', 'message': f'Productos de "{filename}" eliminados ({eliminados} registros). El archivo no se encontró en disco.'})
+
+
+@app.route('/admin/clear_excel_db', methods=['POST'])
+@login_required
+def clear_excel_db():
+    if current_user.username != os.getenv("DEFAULT_ADMIN_USER", "SUPERVISOR"):
+        return jsonify({'status': 'error', 'message': 'No autorizado'}), 403
+
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+    c.execute("DELETE FROM productos WHERE fuente NOT LIKE 'Farmacom%'")
+    eliminados = c.rowcount
+    conn.commit()
+    conn.close()
+    return jsonify({'status': 'success', 'message': f'{eliminados} productos Excel eliminados de la base de datos.'})
 
 
 @app.route('/admin/run_process', methods=['POST'])

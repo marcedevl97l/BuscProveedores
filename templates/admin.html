@@ -285,9 +285,15 @@
                         </div>
 
                         <!-- Archivos disponibles -->
-                        <h4 style="font-size: 12px; font-weight: 800; margin-bottom: 15px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">
-                            Archivos Disponibles:
-                        </h4>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <h4 style="font-size: 12px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin: 0;">
+                                Archivos Disponibles:
+                            </h4>
+                            <button onclick="clearExcelDb(this)" title="Eliminar todos los registros Excel de la BD (no borra los archivos)"
+                                style="font-size: 11px; padding: 4px 10px; border: 1px solid #fecaca; border-radius: 6px; background: white; color: var(--danger); cursor: pointer; font-weight: 600;">
+                                Limpiar BD Excel
+                            </button>
+                        </div>
                         <div style="display: flex; flex-direction: column; gap: 10px;" id="fileList">
                             {% for file in excel_files %}
                             <div id="file-{{ loop.index }}" style="padding: 12px 16px; background: var(--bg-main); border-radius: var(--radius); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px;">
@@ -619,6 +625,26 @@
                     }
                 })
                 .catch(err => logLine('red', 'Error: ' + err));
+        }
+
+        // ─── Limpiar toda la BD Excel ─────────────────────────────────────────
+        function clearExcelDb(btn) {
+            if (!confirm('¿Eliminar TODOS los productos Excel de la base de datos?\nLos archivos en disco no se borran. Esta acción no se puede deshacer.')) return;
+            btn.disabled = true;
+            btn.textContent = '⏳';
+            logLine('blue', 'Limpiando todos los registros Excel de la BD...');
+            fetch('/admin/clear_excel_db', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+                .then(r => r.json())
+                .then(data => {
+                    logLine(data.status === 'success' ? 'green' : 'red', (data.status === 'success' ? '✅ ' : '❌ ') + data.message);
+                    btn.disabled = false;
+                    btn.textContent = 'Limpiar BD Excel';
+                })
+                .catch(err => {
+                    logLine('red', 'Error: ' + err);
+                    btn.disabled = false;
+                    btn.textContent = 'Limpiar BD Excel';
+                });
         }
 
         // ─── Eliminar archivo ─────────────────────────────────────────────────
